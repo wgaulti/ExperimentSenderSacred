@@ -11,7 +11,7 @@ class MinioSection(ctk.CTkFrame):
 
         self.grid_columnconfigure(1, weight=1)
 
-        ctk.CTkLabel(self, text="MinIO Connection", font=("Segoe UI", 16, "bold")).grid(
+        ctk.CTkLabel(self, text="MinIO Connection", font=("Segoe UI", 18, "bold")).grid(
             row=0, column=0, columnspan=2, sticky="w", padx=12, pady=(12, 8)
         )
 

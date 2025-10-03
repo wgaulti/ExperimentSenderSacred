@@ -27,13 +27,16 @@ class ExperimentSection(ctk.CTkFrame):
             "save_locally": False,
             "local_path": "",
         }
+        # batch sending controls (not persisted)
+        self._batch_enable = False
+        self._batch_selected: set[str] = set()
         self._allowed_tabular_suffixes = (".json", ".csv", ".xlsx", ".xlsm")
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
         self.grid_columnconfigure(2, weight=0)
         self.grid_rowconfigure(999, weight=1)
 
-        ctk.CTkLabel(self, text="Experiment Files", font=("Segoe UI", 16, "bold")).grid(
+        ctk.CTkLabel(self, text="Experiment Files", font=("Segoe UI", 18, "bold")).grid(
             row=0, column=0, columnspan=3, sticky="w", padx=12, pady=(12, 8)
         )
 
@@ -77,23 +80,39 @@ class ExperimentSection(ctk.CTkFrame):
         self.details_container.grid_columnconfigure(0, weight=1)
         self.details_container.grid_columnconfigure(1, weight=1)
 
-        # Experiment name
-        ctk.CTkLabel(self, text="Experiment name").grid(row=base_row + 1, column=0, sticky="w", padx=12, pady=(0, 4))
-        self.exp_name_entry = ctk.CTkEntry(self, placeholder_text="Optional name…")
-        self.exp_name_entry.grid(row=base_row + 1, column=1, columnspan=2, sticky="ew", padx=(6, 12), pady=(0, 6))
+        # Batch toggle and siblings list
+        batch_row = base_row + 1
+        self.batch_enable_var = ctk.BooleanVar(value=False)
+        def on_batch_toggle():
+            self._batch_enable = bool(self.batch_enable_var.get())
+            self._render_batch_checkboxes()
+            if callable(self.on_change):
+                self.on_change()
+        ctk.CTkCheckBox(self, text="Send multiple experiments", variable=self.batch_enable_var, command=on_batch_toggle).grid(
+            row=batch_row, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 4)
+        )
+        self.batch_container = ctk.CTkFrame(self, corner_radius=8)
+        self.batch_container.grid(row=batch_row + 1, column=0, columnspan=3, sticky="nsew", padx=6, pady=(0, 6))
+        # hide container by default so it doesn't reserve space
+        try:
+            self.batch_container.grid_remove()
+        except Exception:
+            pass
+        self.batch_container.grid_columnconfigure(0, weight=1)
+        self._render_batch_checkboxes()
 
-        # actions row: Send experiment button inside the section, below cards
+        # actions row: Send experiment button inside the section, below batch
         actions_row = ctk.CTkFrame(self, fg_color="transparent")
-        actions_row.grid(row=base_row + 2, column=0, columnspan=3, sticky="ew", padx=6, pady=(0, 2))
+        actions_row.grid(row=batch_row + 2, column=0, columnspan=3, sticky="ew", padx=6, pady=(0, 2))
         actions_row.grid_columnconfigure(2, weight=1)
         send_btn = ctk.CTkButton(actions_row, text="Send experiment", width=180, height=36, command=self._on_send_click)
         send_btn.grid(row=0, column=2, sticky="e", padx=(0, 6), pady=(2, 2))
 
         # status labels: one for file/cards errors, one for send result
         self.status = ctk.CTkLabel(self, text="", wraplength=520, justify="left")
-        self.status.grid(row=base_row + 3, column=0, columnspan=3, sticky="ew", padx=12, pady=(2, 6))
+        self.status.grid(row=batch_row + 3, column=0, columnspan=3, sticky="ew", padx=12, pady=(2, 6))
         self.send_status = ctk.CTkLabel(self, text="", wraplength=520, justify="left")
-        self.send_status.grid(row=base_row + 4, column=0, columnspan=3, sticky="ew", padx=12, pady=(2, 8))
+        self.send_status.grid(row=batch_row + 4, column=0, columnspan=3, sticky="ew", padx=12, pady=(2, 4))
 
     def _on_send_click(self):
         try:
@@ -122,8 +141,32 @@ class ExperimentSection(ctk.CTkFrame):
         data["raw_data_send_minio"] = int(bool(self._raw_data_settings.get("send_minio", True)))
         data["raw_data_save_locally"] = int(bool(self._raw_data_settings.get("save_locally", False)))
         data["raw_data_local_path"] = self._raw_data_settings.get("local_path", "")
-        # experiment name
-        data["experiment_name"] = self.exp_name_entry.get().strip()
+        # compute list of folders per batch toggle
+        folders_list: list[str] = []
+        base_folder = (self.folder_entry.get() or "").strip()
+        try:
+            if self._batch_enable:
+                # list siblings of selected folder
+                if base_folder:
+                    p = Path(base_folder)
+                    parent = p.parent if p.exists() else None
+                    if parent and parent.exists():
+                        # if no selection yet, default to all siblings
+                        if not self._batch_selected:
+                            try:
+                                for d in parent.iterdir():
+                                    if d.is_dir() and not d.name.startswith("."):
+                                        self._batch_selected.add(d.name)
+                            except Exception:
+                                pass
+                        for name in sorted(list(self._batch_selected)):
+                            folders_list.append(str((parent / name).resolve()))
+            else:
+                if base_folder:
+                    folders_list = [str(Path(base_folder).resolve())]
+        except Exception:
+            folders_list = [base_folder] if base_folder else []
+        data["experiment_folders"] = folders_list
         return data
 
     def set_prefs(self, data: dict):
@@ -168,10 +211,62 @@ class ExperimentSection(ctk.CTkFrame):
         self._raw_data_settings["save_locally"] = bool(data.get("raw_data_save_locally", 0))
         self._raw_data_settings["local_path"] = data.get("raw_data_local_path", "") or ""
         # restore experiment name
-        self.exp_name_entry.delete(0, "end")
-        self.exp_name_entry.insert(0, data.get("experiment_name", ""))
+        # self.exp_name_entry.delete(0, "end")
+        # self.exp_name_entry.insert(0, data.get("experiment_name", ""))
         # ensure details reflect restored prefs
         self.render_details_sections()
+
+    def _render_batch_checkboxes(self):
+        # clear
+        for child in list(self.batch_container.winfo_children() if hasattr(self, 'batch_container') else []):
+            try:
+                child.destroy()
+            except Exception:
+                pass
+        if not getattr(self, 'batch_container', None):
+            return
+        # Hide the container when disabled; show when enabled
+        if not bool(self.batch_enable_var.get()):
+            try:
+                self.batch_container.grid_remove()
+            except Exception:
+                pass
+            return
+        else:
+            try:
+                self.batch_container.grid()
+            except Exception:
+                pass
+        # build siblings list
+        base_folder = (self.folder_entry.get() or "").strip()
+        siblings: list[str] = []
+        try:
+            if base_folder:
+                p = Path(base_folder)
+                parent = p.parent if p.exists() else None
+                if parent and parent.exists():
+                    siblings = [d.name for d in parent.iterdir() if d.is_dir() and not d.name.startswith('.')]
+                    siblings.sort(key=lambda n: n.lower())
+        except Exception:
+            siblings = []
+        # default select all if nothing yet
+        if not self._batch_selected:
+            self._batch_selected = set(siblings)
+        # render
+        for i, name in enumerate(siblings):
+            var = ctk.BooleanVar(value=(name in self._batch_selected))
+            def _toggle(n=name, v=var):
+                if v.get():
+                    self._batch_selected.add(n)
+                else:
+                    try:
+                        self._batch_selected.remove(n)
+                    except KeyError:
+                        pass
+                if callable(self.on_change):
+                    self.on_change()
+            cb = ctk.CTkCheckBox(self.batch_container, text=name, variable=var, command=_toggle)
+            cb.grid(row=i, column=0, sticky="w", padx=8, pady=2)
 
     # --- Events ---
     def choose_folder(self):

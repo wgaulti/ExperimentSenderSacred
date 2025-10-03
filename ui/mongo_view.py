@@ -44,10 +44,10 @@ class MongoSection(ctk.CTkFrame):
         self.pass_entry.grid(row=7, column=1, sticky="ew", padx=(6, 12), pady=(0, 4))
         self.db_entry.grid(row=9, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 6))
 
-        self.tls_chk = ctk.CTkCheckBox(self, text="TLS/SSL (recommended with mongodb+srv)")
+        self.tls_chk = ctk.CTkCheckBox(self, text="TLS/SSL")
         self.tls_chk.grid(row=10, column=0, sticky="w", padx=12, pady=6)
 
-        self.remember_pwd = ctk.CTkCheckBox(self, text="Remember password (keyring)")
+        self.remember_pwd = ctk.CTkCheckBox(self, text="Save password")
         self.remember_pwd.grid(row=10, column=1, sticky="e", padx=12, pady=6)
 
         btn_row = ctk.CTkFrame(self, fg_color="transparent")

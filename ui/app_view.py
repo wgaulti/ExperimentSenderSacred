@@ -10,8 +10,13 @@ from ui.experiment_view import ExperimentSection
 class AppView(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("App View • CustomTkinter")
+        self.title("Experiment Sender Sacred")
         # Window size will adapt to content via fit_to_content()
+        # Start wider by default
+        try:
+            self.geometry("1200x800")
+        except Exception:
+            pass
 
         # Prefs (sauvegarde/restauration)
         self.prefs = Preferences()
@@ -20,11 +25,13 @@ class AppView(ctk.CTk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        # --- FRAME ---
-        frm = ctk.CTkFrame(self, corner_radius=12)
+        # --- SCROLLABLE FRAME ---
+        frm = ctk.CTkScrollableFrame(self, corner_radius=12, height=700, fg_color="transparent")
         frm.grid(row=0, column=0, padx=16, pady=16, sticky="nsew")
-        frm.grid_columnconfigure(0, weight=0)
-        frm.grid_columnconfigure(1, weight=1)
+        # keep a reference to adjust height dynamically on resize
+        self.content_frame = frm
+        frm.grid_columnconfigure(0, weight=1)
+        frm.grid_columnconfigure(1, weight=2)
 
         # Left stack: Mongo (top) then MinIO (bottom)
         self.mongo_section = MongoSection(frm, on_save=self.save_prefs, on_change=lambda: self.after(10, self.fit_to_content))
@@ -33,7 +40,7 @@ class AppView(ctk.CTk):
         # --- EXPERIMENT FILES SECTION ---
         self.exp_section = ExperimentSection(
             frm,
-            on_change=lambda: self.after(10, self.fit_to_content),
+            on_change=lambda: self.after(0, self.fit_to_content),
             on_send=self._on_send_experiment,
         )
         self.exp_section.grid(row=0, column=1, rowspan=20, sticky="nsew", padx=12, pady=(8, 8))
@@ -124,6 +131,7 @@ class AppView(ctk.CTk):
             "experiment": {
                 "folder": data.get("experiment_folder", ""),
                 "name": data.get("experiment_name", ""),
+                "folders": data.get("experiment_folders", []),
                 "selectors": {
                     "config": {
                         "name": data.get("config_name", ""),
@@ -200,12 +208,18 @@ class AppView(ctk.CTk):
             self.update_idletasks()
             req_w = self.winfo_reqwidth()
             req_h = self.winfo_reqheight()
-            min_w, max_w = 600, 1000
-            min_h, max_h = 500, 900
+            # widen default clamps
+            min_w, max_w = 1200, 1800
+            min_h, max_h = 800, 1000
             new_w = max(min(req_w, max_w), min_w)
             new_h = max(min(req_h, max_h), min_h)
             self.minsize(min_w, min_h)
             self.geometry(f"{new_w}x{new_h}")
+            # adjust scrollable frame height so it doesn't reserve extra space
+            try:
+                self.content_frame.configure(height=max(min_h - 40, 400))
+            except Exception:
+                pass
         except Exception:
             pass
 
