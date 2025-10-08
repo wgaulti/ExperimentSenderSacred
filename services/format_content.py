@@ -14,7 +14,7 @@ def coerce_bool_option(value):
 
 
 def format_config(experiment_folder, config):
-    if config:
+    if config["name"] != "None":
         file_path = os.path.join(experiment_folder, config["name"])
         config_type = config["name"].split(".")[-1]
         if config_type == "json":
@@ -25,7 +25,9 @@ def format_config(experiment_folder, config):
         elif config_type == "xlsx" or config_type == "xlsm":
             data = pd.read_excel(file_path, sheet_name=config["sheet"]).to_dict(orient="records")
         elif config_type == "csv":
-            data = pd.read_csv(file_path).to_dict(orient="records")
+            sep = (config.get("options", {}) or {}).get("sep", ",")
+            sep = "\t" if sep == "\\t" else sep
+            data = pd.read_csv(file_path, sep=sep).to_dict(orient="records")
         else:
             raise ValueError(f"Unsupported config type: {config_type}")
     return data
@@ -33,7 +35,7 @@ def format_config(experiment_folder, config):
 
 def format_metrics(experiment_folder, metrics):
     metrics_data = {}
-    if metrics:
+    if metrics["name"] != "None":
         file_path = os.path.join(experiment_folder, metrics["name"])
         metrics_type = metrics["name"].split(".")[-1]
         if metrics_type == "xlsx" or metrics_type == "xlsm":
@@ -61,13 +63,19 @@ def format_metrics(experiment_folder, metrics):
 
 def format_results(experiment_folder, results):
     results_data = {}
-    if results:
+    if results["name"] != "None":
         file_path = os.path.join(experiment_folder, results["name"])
         results_type = results["name"].split(".")[-1]
         if results_type == "xlsx" or results_type == "xlsm":
-            data = pd.read_excel(file_path, sheet_name=results["sheet"]).to_dict(orient="records")
+            data_ = pd.read_excel(file_path, sheet_name=results["sheet"], header=None).to_dict(orient="records")
+            data = {e[0]: e[1] for e in data_}
+
         elif results_type == "csv":
-            data = pd.read_csv(file_path).to_dict(orient="records")
+            sep = (results.get("options", {}) or {}).get("sep", ",")
+            sep = "\t" if sep == "\\t" else sep
+            data_ = pd.read_csv(file_path, sep=sep, header=None).to_dict(orient="records")
+            data = {e[0]: e[1] for e in data_}
+
         elif results_type == "json":
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -76,15 +84,15 @@ def format_results(experiment_folder, results):
         
         results_data = {}
 
-        for param in data:
-            results_data[param['param']] = param['value']
+        for k, v in data.items():
+            results_data[k] = v
 
     return results_data
 
 
 def format_raw_data(experiment_folder, raw_data):
     files = {}
-    if raw_data:
+    if raw_data["name"] != "None":
         experiment_name = experiment_folder.split("/")[-1]
         file_path = os.path.join(experiment_folder, raw_data["name"])
         if os.path.isfile(file_path):

@@ -30,15 +30,11 @@ def send_experiment(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     raw_data_save_options = raw_data.get("options", {}) or {}
 
-    print(f"folders: {folders}\n")
-
-
-
     # --- Build Mongo connection using shared helper ---
     mongo_payload = payload.get("mongo", {}) or {}
     mongo_url, mongo_db = build_mongo_url_from_payload(mongo_payload)
 
-
+    print(f"payload: {payload}\n")
     # Attach Mongo observer
 
     # Keep originals for per-folder formatting
@@ -110,7 +106,7 @@ def send_experiment(payload: Dict[str, Any]) -> Dict[str, Any]:
             ex.add_config(cfg)
 
             try:
-                current_run = ex.run()
+                current_run = ex.run(options={'--capture': 'no'})
                 current_run.result = res
                 # After run, optionally save raw_data (if any) according to options
                 results_messages.append(f"{experiment_name or 'TEST_EXPERIMENT'}, run {current_run._id} sent")
@@ -121,47 +117,3 @@ def send_experiment(payload: Dict[str, Any]) -> Dict[str, Any]:
                 all_ok = False
                 results_messages.append(f"{experiment_name or 'TEST_EXPERIMENT'} failed: {e}")
         return {"ok": all_ok, "message": "; ".join(results_messages)}
-
-  
-
-# mongo = payload.get("mongo", {}) or {}
-# minio = payload.get("minio", {}) or {}
-# experiment = payload.get("experiment", {}) or {}
-# selectors = experiment.get("selectors", {}) or {}
-
-# required_mongo = ["use_uri", "uri", "host", "port", "user", "db", "tls"]
-# required_minio = ["endpoint", "access_key", "tls"]
-# required_exp = ["folder"]
-# required_selectors = ["config", "metrics", "results", "raw_data", "artifacts"]
-
-# missing = []
-# missing += [f"mongo.{k}" for k in required_mongo if k not in mongo]
-# missing += [f"minio.{k}" for k in required_minio if k not in minio]
-# missing += [f"experiment.{k}" for k in required_exp if k not in experiment]
-# missing += [f"experiment.selectors.{k}" for k in required_selectors if k not in selectors]
-# if missing:
-#     return {"ok": False, "message": f"Missing required fields: {', '.join(missing)}"}
-
-# message = {
-#     "ok": True,
-#     "message": "Experiment sent (stub)",
-#     "summary": {
-#         "mongo": {
-#             "use_uri": bool(mongo.get("use_uri")),
-#             "host": mongo.get("host"),
-#             "db": mongo.get("db"),
-#             "tls": bool(mongo.get("tls")),
-#         },
-#         "minio": {
-#             "endpoint": minio.get("endpoint"),
-#             "access_key": minio.get("access_key"),
-#             "tls": bool(minio.get("tls")),
-#         },
-#         "experiment": {
-#             "folder": experiment.get("folder"),
-#             "selectors": selectors,
-#         },
-#     },
-# }
-# print(message)
-# return message

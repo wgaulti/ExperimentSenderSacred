@@ -27,6 +27,12 @@ class ExperimentSection(ctk.CTkFrame):
             "save_locally": False,
             "local_path": "",
         }
+        # CSV separators per selector (persisted)
+        self._csv_separators: dict[str, str] = {
+            "config": ",",
+            "metrics": ",",
+            "results": ",",
+        }
         # batch sending controls (not persisted)
         self._batch_enable = False
         self._batch_selected: set[str] = set()
@@ -141,6 +147,10 @@ class ExperimentSection(ctk.CTkFrame):
         data["raw_data_send_minio"] = int(bool(self._raw_data_settings.get("send_minio", True)))
         data["raw_data_save_locally"] = int(bool(self._raw_data_settings.get("save_locally", False)))
         data["raw_data_local_path"] = self._raw_data_settings.get("local_path", "")
+        # CSV separators
+        data["config_sep"] = self._csv_separators.get("config", ",")
+        data["metrics_sep"] = self._csv_separators.get("metrics", ",")
+        data["results_sep"] = self._csv_separators.get("results", ",")
         # compute list of folders per batch toggle
         folders_list: list[str] = []
         base_folder = (self.folder_entry.get() or "").strip()
@@ -210,6 +220,10 @@ class ExperimentSection(ctk.CTkFrame):
         self._raw_data_settings["send_minio"] = bool(data.get("raw_data_send_minio", 1))
         self._raw_data_settings["save_locally"] = bool(data.get("raw_data_save_locally", 0))
         self._raw_data_settings["local_path"] = data.get("raw_data_local_path", "") or ""
+        # restore CSV separators
+        self._csv_separators["config"] = data.get("config_sep", ",") or ","
+        self._csv_separators["metrics"] = data.get("metrics_sep", ",") or ","
+        self._csv_separators["results"] = data.get("results_sep", ",") or ","
         # restore experiment name
         # self.exp_name_entry.delete(0, "end")
         # self.exp_name_entry.insert(0, data.get("experiment_name", ""))
@@ -279,6 +293,17 @@ class ExperimentSection(ctk.CTkFrame):
             self.on_change()
 
     def on_file_changed(self, key: str, value: str):
+        # Reset dependent selections when source file/folder changes
+        try:
+            if key == "metrics":
+                # clear selected columns and time column; will be recomputed on render
+                self._metrics_settings["selected_cols"] = set()
+                self._metrics_settings["time_col"] = ""
+            elif key in ("raw_data", "artifacts"):
+                # clear previously selected files so defaults (all files) apply
+                self._selected_files[key] = set()
+        except Exception:
+            pass
         self.update_sheet_menu_for(key)
         self.render_details_sections()
         if callable(self.on_change):
@@ -421,6 +446,20 @@ class ExperimentSection(ctk.CTkFrame):
             if sheet and not (key in ("raw_data", "artifacts")):
                 ctk.CTkLabel(sec, text="Sheet").grid(row=2, column=0, sticky="w", padx=8, pady=4)
                 ctk.CTkLabel(sec, text=sheet).grid(row=2, column=1, sticky="w", padx=(6, 8), pady=4)
+            # CSV separator selector for config/metrics/results
+            if path and path.is_file() and path.suffix.lower() == ".csv" and key in ("config", "metrics", "results"):
+                sep_row = 3 if (sheet and not (key in ("raw_data", "artifacts"))) else 2
+                ctk.CTkLabel(sec, text="Separator").grid(row=sep_row, column=0, sticky="w", padx=8, pady=4)
+                sep_menu = ctk.CTkOptionMenu(
+                    sec,
+                    values=[",", ";", "|", "\\t"],
+                    dynamic_resizing=False,
+                    command=lambda v, k=key: self._on_sep_changed(k, v)
+                )
+                current_sep = self._csv_separators.get(key, ",")
+                display_val = "\\t" if current_sep == "\t" else current_sep
+                sep_menu.set(display_val)
+                sep_menu.grid(row=sep_row, column=1, sticky="ew", padx=(6, 8), pady=4)
             # folder checklist for raw_data / artifacts
             if key in ("raw_data", "artifacts") and path and path.is_dir():
                 files = []
@@ -623,8 +662,10 @@ class ExperimentSection(ctk.CTkFrame):
                     max_len = max((len(r) for r in rows), default=0)
                     cols = [str(i) for i in range(max_len)]
             elif path.suffix.lower() == ".csv":
+                # Use selected separator for metrics preview
+                sep = self._csv_separators.get("metrics", ",")
                 with open(path, newline="", encoding="utf-8") as f:
-                    reader = csv.reader(f)
+                    reader = csv.reader(f, delimiter=("\t" if sep == "\t" else sep))
                     for i, row in enumerate(reader):
                         if i == 0 and bool(self._metrics_settings.get("header", True)):
                             cols = [str(c) for c in row]
@@ -642,6 +683,15 @@ class ExperimentSection(ctk.CTkFrame):
             except Exception:
                 pass
         return cols, rows
+
+    def _on_sep_changed(self, key: str, display_value: str):
+        sep = "\t" if display_value == "\\t" else display_value
+        self._csv_separators[key] = sep
+        # re-render metrics preview immediately to reflect new parsing
+        if key == "metrics":
+            self.render_details_sections()
+        if callable(self.on_change):
+            self.on_change()
 
     def _on_metrics_time_column_changed(self, col_name: str):
         self._metrics_settings["time_col"] = col_name or ""

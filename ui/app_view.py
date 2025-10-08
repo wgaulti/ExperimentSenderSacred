@@ -138,6 +138,7 @@ class AppView(ctk.CTk):
                         "sheet": data.get("config_sheet", ""),
                         "options": {
                             "flatten": data.get("config_flatten", 0),
+                            "sep": data.get("config_sep", ","),
                         },
                     },
                     "metrics": {
@@ -148,11 +149,15 @@ class AppView(ctk.CTk):
                             "has_time": data.get("metrics_has_time", 0),
                             "time_col": data.get("metrics_time_col", ""),
                             "selected_cols": data.get("metrics_selected_cols", []),
+                            "sep": data.get("metrics_sep", ","),
                         },
                     },
                     "results": {
                         "name": data.get("results_name", ""),
                         "sheet": data.get("results_sheet", ""),
+                        "options": {
+                            "sep": data.get("results_sep", ","),
+                        },
                     },
                     "raw_data": {
                         "name": data.get("raw_data_name", ""),
