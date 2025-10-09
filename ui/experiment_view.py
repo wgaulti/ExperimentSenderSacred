@@ -589,7 +589,7 @@ class ExperimentSection(ctk.CTkFrame):
                     self.render_details_sections()
                     if callable(self.on_change):
                         self.on_change()
-                time_cb = ctk.CTkCheckBox(sec, text="Time column", variable=has_time_var, command=on_has_time_toggle)
+                time_cb = ctk.CTkCheckBox(sec, text="x-axis column", variable=has_time_var, command=on_has_time_toggle)
                 time_cb.grid(row=3, column=1, sticky="w", padx=8, pady=(6, 4))
 
                 next_row = 4
@@ -605,7 +605,7 @@ class ExperimentSection(ctk.CTkFrame):
                     elif time_values:
                         time_menu.set(time_values[0])
                         self._metrics_settings["time_col"] = time_values[0]
-                    ctk.CTkLabel(sec, text="Time column").grid(row=next_row, column=0, sticky="w", padx=8, pady=4)
+                    ctk.CTkLabel(sec, text="x-axis column").grid(row=next_row, column=0, sticky="w", padx=8, pady=4)
                     time_menu.grid(row=next_row, column=1, sticky="ew", padx=(6, 8), pady=4)
                     next_row += 1
 

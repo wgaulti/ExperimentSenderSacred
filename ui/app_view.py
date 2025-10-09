@@ -5,6 +5,7 @@ from pathlib import Path
 from ui.mongo_view import MongoSection
 from ui.minio_view import MinioSection
 from ui.experiment_view import ExperimentSection
+import threading
 
 
 class AppView(ctk.CTk):
@@ -176,28 +177,55 @@ class AppView(ctk.CTk):
             },
         }
 
-        # produce payload and call service
+        # produce payload and call service (non-blocking)
         try:
             try:
                 self.exp_section.send_status.configure(text="Sending experiment…")
             except Exception:
                 pass
-            self.update_idletasks()
-            res = send_experiment(payload)
-            if isinstance(res, dict) and res.get("ok"):
+            try:
+                # disable button to avoid double-clicks
+                self.exp_section.send_btn.configure(state="disabled")
+            except Exception:
+                pass
+
+            def _worker():
+                res = None
+                err = None
                 try:
-                    self.exp_section.send_status.configure(text=f"✅ {res.get('message', 'OK')}")
-                except Exception:
-                    pass
-            else:
-                msg = (res.get("message") if isinstance(res, dict) else str(res)) or "Failed"
-                try:
-                    self.exp_section.send_status.configure(text=f"❌ {msg}")
-                except Exception:
-                    pass
+                    res = send_experiment(payload)
+                except Exception as e:
+                    err = e
+
+                def _update_ui():
+                    try:
+                        if err is not None:
+                            self.exp_section.send_status.configure(text=f"❌ Error: {err.__class__.__name__}: {err}")
+                        else:
+                            if isinstance(res, dict) and res.get("ok"):
+                                self.exp_section.send_status.configure(text=f"✅ {res.get('message', 'OK')}")
+                            else:
+                                msg = (res.get("message") if isinstance(res, dict) else str(res)) or "Failed"
+                                self.exp_section.send_status.configure(text=f"❌ {msg}")
+                    except Exception:
+                        pass
+                    finally:
+                        try:
+                            self.exp_section.send_btn.configure(state="normal")
+                        except Exception:
+                            pass
+                        self.after(10, self.fit_to_content)
+
+                self.after(0, _update_ui)
+
+            threading.Thread(target=_worker, daemon=True).start()
         except Exception as e:
             try:
                 self.exp_section.send_status.configure(text=f"❌ Error: {e.__class__.__name__}: {e}")
+            except Exception:
+                pass
+            try:
+                self.exp_section.send_btn.configure(state="normal")
             except Exception:
                 pass
         self.after(10, self.fit_to_content)
